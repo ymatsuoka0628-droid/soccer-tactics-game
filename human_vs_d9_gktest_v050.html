@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Human vs D9-GKtest · v0.5.0</title>
+<style>
+:root{--bg:#f5f5f1;--ink:#171717;--muted:#6f6f69;--line:#c9c9c2;--panel:#fff;--sel:#e8e8e2;--legal:#deded7;--ball:#111}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif}
+.app{max-width:720px;margin:0 auto;padding:env(safe-area-inset-top) 12px calc(20px + env(safe-area-inset-bottom))}
+.header{display:flex;align-items:flex-end;justify-content:space-between;padding:12px 2px 8px;gap:8px}.title{font-size:20px;font-weight:700}.sub{font-size:12px;color:var(--muted)}
+.status{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:4px 12px}.status b{font-size:15px}.score{font-size:22px;font-weight:750;align-self:center;grid-row:1/3;grid-column:2}.message{font-size:13px;color:var(--muted)}
+.board-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}.board{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));grid-template-rows:repeat(10,minmax(0,1fr));aspect-ratio:9/10;width:100%;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.cell.goal-row{background:rgba(23,23,23,.045);border-style:dashed}.cell.goal-row.goal-out{background:transparent;border-color:transparent}.goalnum{position:absolute;top:2px;left:5px;font-size:10px;color:var(--muted);pointer-events:none}.cell{position:relative;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;min-width:0;touch-action:manipulation}.cell:nth-child(9n+1){border-left:1px solid var(--line)}
+.cell.legal::after{content:"";width:22%;aspect-ratio:1;border-radius:50%;background:var(--legal);position:absolute}.cell.selected{background:var(--sel)}
+.cell.pass-target .piece{box-shadow:0 0 0 4px rgba(23,23,23,.20)}.cell.pass-trail{background:repeating-linear-gradient(90deg,transparent,transparent 5px,rgba(23,23,23,.13) 5px,rgba(23,23,23,.13) 9px)}.cell.pass-from::before,.cell.pass-to::before{content:"";position:absolute;inset:12%;border:2px dashed rgba(23,23,23,.38);border-radius:10px;z-index:1}.cell.shot-path{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(23,23,23,.07) 6px,rgba(23,23,23,.07) 11px)}
+.piece{z-index:2;width:64%;aspect-ratio:1;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:var(--panel);z-index:2;position:relative}.A{border-radius:50%}.B{border-radius:7px}.gk{border-width:3px}.ball{position:absolute;width:24%;aspect-ratio:1;border-radius:50%;background:var(--ball);right:-8%;bottom:-8%;border:1px solid var(--panel)}
+.goal-grid{display:grid;grid-template-columns:repeat(9,1fr);height:28px;margin:0}.goal-slot{border:1px dashed transparent;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)}.goal-slot.mouth{border-color:var(--line);background:#fafaf7}.goal-slot.shootable{background:var(--ink);color:white;font-weight:800}.goalbar{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}.goalbar button{font-size:12px;padding:8px 2px}.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}.controls.two{grid-template-columns:1fr 1fr;margin-top:-2px}.controls button,.goalbar button{appearance:none;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:11px 8px;font-weight:650;color:var(--ink)}button:disabled{opacity:.35}.danger{border-color:#999!important}
+.legend{font-size:12px;color:var(--muted);margin:8px 2px 12px}.log{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;max-height:210px;overflow:auto}.log h3{font-size:14px;margin:0 0 6px}.logline{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.55;border-top:1px solid #eee;padding:4px 0}.logline:first-of-type{border-top:0}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:11px;margin-left:4px}.overlay{position:fixed;inset:0;background:rgba(255,255,255,.88);display:none;align-items:center;justify-content:center;z-index:20;text-align:center;padding:24px}.overlay.show{display:flex}.overlay .box{background:white;border:1px solid var(--line);border-radius:18px;padding:22px;max-width:360px}.overlay .big{font-size:28px;font-weight:800;margin-bottom:8px}
+#goalTop,#goalBottom{display:none!important}</style></head>
+<body><div class="app">
+<div class="header"><div><div class="title">Human A vs D9-GKtest B</div><div class="sub">Prototype v0.5.0 · Rules 0.2-GKtest / AI D9</div></div><div class="sub">4 actions / turn</div></div>
+<div class="status"><div><b id="turnText">Aのターン</b><span id="phaseBadge" class="badge">HUMAN</span></div><div id="msg" class="message">駒をタップしてください。</div><div id="score" class="score">0–0</div></div>
+<div class="board-wrap"><div id="goalTop" class="goal-grid"></div><div id="board" class="board"></div><div id="goalBottom" class="goal-grid"></div><div id="goalbar" class="goalbar"></div></div>
+<div class="controls"><button id="undo">↶ Undo</button><button id="endTurn">ターン終了</button><button id="restart" class="danger">リスタート</button></div><div class="controls two"><button id="copyLog">ログをコピー</button><button id="rulesBtn">ルール表示</button></div>
+<div class="legend">○ A＝あなた　□ B＝D9 AI　●＝ボール　太枠＝GK。点＝移動先、輪郭強調＝パス可能な味方、ゴール側の強調＝得点可能コース。前後受けはRules 0.2では未採用。直前のパス軌跡は約1.5秒表示。AIはD9。</div>
+<div class="log"><h3>Action log</h3><div id="logLines"></div></div>
+</div>
+<div id="overlay" class="overlay"><div class="box"><div id="overlayBig" class="big"></div><div id="overlayText"></div></div></div>
+<script>
+const ROWS=8,COLS=9,ACTIONS=4,DIR4=[[-1,0],[1,0],[0,-1],[0,1]];
+const $=s=>document.querySelector(s); const cp=o=>JSON.parse(JSON.stringify(o));
+function initial(score={A:0,B:0},ballTeam='A'){
+ return {pieces:{A:{A1:[6,1],A2:[6,3],A3:[6,5],A4:[5,2],A5:[5,6],A6:[4,4],AG:[8,4]},B:{B1:[1,1],B2:[1,3],B3:[1,5],B4:[2,2],B5:[2,6],B6:[3,4],BG:[-1,4]}},ballTeam,holder:ballTeam==='A'?'A6':'B6',score:cp(score)};
+}
+let state=initial(), acting='A', actionsLeft=ACTIONS, selected=null, legalTargets=[], shotCells=[], history=[], logs=[], aiBusy=false, passTrail=null, passTrailTimer=null;
+let aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};
+const other=t=>t==='A'?'B':'A'; const md=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]); const inside=p=>p[0]>=0&&p[0]<ROWS&&p[1]>=0&&p[1]<COLS;
+function playableGK(p,t){
+ return p[1]>=0&&p[1]<COLS&&(inside(p)||(t==='A'&&p[0]===ROWS)||(t==='B'&&p[0]===-1));
+}
+const sign=x=>x===0?0:(x>0?1:-1); const lane=c=>c<=2?'L':(c>=6?'R':'C');
+function ray(a,b){let dr=b[0]-a[0],dc=b[1]-a[1];if(dr===0&&dc!==0)return[0,sign(dc)];if(dc===0&&dr!==0)return[sign(dr),0];if(dr!==0&&Math.abs(dr)===Math.abs(dc))return[sign(dr),sign(dc)];return null}
+function occ(s=state){let m={};for(let t of ['A','B'])for(let [k,p] of Object.entries(s.pieces[t]))m[p.join(',')]=[t,k];return m}
+function field(t,s=state){return Object.keys(s.pieces[t]).filter(k=>!k.endsWith('G'))}
+function passPieces(t,s=state){return Object.keys(s.pieces[t])}
+function moveLegal(s,t,k,z){return inside(z)&&!occ(s)[z.join(',')]&&md(s.pieces[t][k],z)===1}
+function offsideLine(s,t){let rows=field(other(t),s).map(k=>s.pieces[other(t)][k][0]).sort((a,b)=>a-b);return t==='A'?rows[1]:rows[rows.length-2]}
+function isOffside(s,t,rp,bp){let L=offsideLine(s,t);return t==='A'?rp[0]<Math.min(bp[0],L):rp[0]>Math.max(bp[0],L)}
+function passLegal(s,t,a,b){
+ let src=s.pieces[t][a],dst=s.pieces[t][b],d=ray(src,dst);if(!d)return[false,'縦・横・45°斜めのみ'];
+ // Rules 0.2: 中間のDFは自動遮断しない。出し手のパス方向1マスだけを見る。
+ let sender=occ(s)[[src[0]+d[0],src[1]+d[1]].join(',')];if(sender&&sender[0]!==t)return[false,'出し手のパス方向をDFが塞いでいる'];
+ // 横パスは受け手側DFでは止まらない。縦・斜めだけ受け手のパス元側を判定。
+ if(d[0]!==0){let receiver=occ(s)[[dst[0]-d[0],dst[1]-d[1]].join(',')];if(receiver&&receiver[0]!==t)return[false,'受け手のパス元側をDFが塞いでいる']}
+ if(isOffside(s,t,dst,src))return[false,'オフサイド'];return[true,'OK']}
+function tackleResult(s,d,k){let a=other(d),D=s.pieces[d][k],H=s.pieces[a][s.holder];if(md(D,H)!==1)return[null,'illegal'];let e=[2*H[0]-D[0],2*H[1]-D[1]],n=cp(s);if(!inside(e)){n.ballTeam=d;n.holder=k;return[n,'win_boundary']}let q=occ(s)[e.join(',')];if(!q){n.pieces[a][s.holder]=e;return[n,'push']}if(q[0]===d){n.ballTeam=d;n.holder=k;return[n,'win_opponent_block']}return[n,'friendly_block_hold']}
+function shotPath(src,target){let d=ray(src,target);if(!d)return[];let z=[...src],out=[];while(z[0]!==target[0]||z[1]!==target[1]){z=[z[0]+d[0],z[1]+d[1]];out.push(z)}return out}
+function setPassTrail(src,dst){
+ let d=ray(src,dst),cells=[]; if(d){let z=[...src];while(z[0]!==dst[0]||z[1]!==dst[1]){z=[z[0]+d[0],z[1]+d[1]];if(inside(z))cells.push(z.join(','))}}
+ passTrail={from:src.join(','),to:dst.join(','),cells};
+ if(passTrailTimer)clearTimeout(passTrailTimer);
+ passTrailTimer=setTimeout(()=>{passTrail=null;render()},1500);
+}
+function legalShotCount(s,t){if(s.ballTeam!==t)return 0;let h=s.holder,gr=t==='A'?-1:ROWS,n=0;for(let gc=2;gc<=6;gc++)if(shotLegal(s,t,h,[gr,gc])[0])n++;return n}
+function nearShotPotential(s,t){
+ if(s.ballTeam!==t)return 0;
+ let h=s.holder,p=s.pieces[t][h],goalRow=t==='A'?0:ROWS-1,dist=Math.abs(p[0]-goalRow);
+ let v=Math.max(0,4-dist)*4;
+ for(let k of field(t,s)){if(k===h||!passLegal(s,t,h,k)[0])continue;let q=s.pieces[t][k],d=Math.abs(q[0]-goalRow);v=Math.max(v,Math.max(0,4-d)*5)}
+ return v;
+}
+function gkMoveActions(s,t){
+ let k=t+'G',p=s.pieces[t][k],out=[],o=occ(s);
+ for(let [dr,dc] of DIR4){let z=[p[0]+dr,p[1]+dc];if(playableGK(z,t)&&!o[z.join(',')])out.push(['gk_move',k,z])}
+ return out;
+}
+
+function shotLegal(s,t,k,target){let src=s.pieces[t][k],d=ray(src,target);if(!d)return[false,'角度'];let q=occ(s)[[src[0]+d[0],src[1]+d[1]].join(',')];if(q&&q[0]!==t&&!q[1].endsWith('G'))return[false,'DFブロック'];let gk=s.pieces[other(t)][other(t)+'G'];for(let i=0;i<shotPath(src,target).length;i++){if(md(gk,shotPath(src,target)[i])<i+1)return[false,'GK']}return[true,'OK']}
+function applyAction(s,t,a){let n=cp(s),res='';if(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')n.pieces[t][a[1]]=a[2];else if(a[0]==='pass')n.holder=a[2];else if(a[0]==='tackle'){[n,res]=tackleResult(s,t,a[1])}else if(a[0]==='shoot'){n.score[t]++;res='GOAL'}return[n,res]}
+function legalActions(s,t){
+ let out=[];
+ if(s.ballTeam===t){
+  out.push(...gkMoveActions(s,t));
+  let h=s.holder,[r,c]=s.pieces[t][h];
+  for(let [dr,dc] of DIR4){let z=[r+dr,c+dc];if(moveLegal(s,t,h,z))out.push(['dribble',h,z])}
+  for(let k of passPieces(t,s))if(k!==h&&passLegal(s,t,h,k)[0])out.push(['pass',h,k]);
+  for(let k of field(t,s)){
+   if(k===h)continue;let [rr,cc]=s.pieces[t][k];
+   for(let [dr,dc] of DIR4){let z=[rr+dr,cc+dc];if(moveLegal(s,t,k,z))out.push(['move',k,z])}
+  }
+  let gr=t==='A'?-1:ROWS;for(let gc=2;gc<=6;gc++)if(shotLegal(s,t,h,[gr,gc])[0])out.push(['shoot',h,[gr,gc]]);
+ } else {
+  let H=s.pieces[other(t)][s.holder];
+  if(t==='B')out.push(...gkMoveActions(s,t));
+  for(let k of field(t,s)){
+   if(md(s.pieces[t][k],H)===1)out.push(['tackle',k]);
+   let [r,c]=s.pieces[t][k];
+   for(let [dr,dc] of DIR4){let z=[r+dr,c+dc];if(moveLegal(s,t,k,z))out.push(['move',k,z])}
+  }
+ }
+ return out;
+}
+function progress(s,t){if(s.ballTeam!==t)return-20;let r=s.pieces[t][s.holder][0];return t==='A'?ROWS-1-r:r}
+function routeProfile(s,t){let o={L:0,C:0,R:0};if(s.ballTeam!==t)return o;let br=s.pieces[t][s.holder][0];for(let k of field(t,s)){if(k===s.holder||!passLegal(s,t,s.holder,k)[0])continue;let p=s.pieces[t][k],f=t==='A'?br-p[0]:p[0]-br;if(f<0)continue;let press=field(other(t),s).filter(d=>md(p,s.pieces[other(t)][d])===1).length;o[lane(p[1])]=Math.max(o[lane(p[1])],Math.max(0,3*f+2-2*press))}return o}
+function optionValue(s,t){let x=routeProfile(s,t);return Object.values(x).reduce((a,b)=>a+b,0)+3*Object.values(x).filter(v=>v>0).length}
+function stateSig(s,t){return JSON.stringify([s.ballTeam,s.holder,s.pieces[t],s.pieces[other(t)]])}
+function immediateRisk(s,t){if(s.ballTeam!==t)return 100;let H=s.pieces[t][s.holder],d=other(t),risk=0;for(let k of field(d,s))if(md(s.pieces[d][k],H)===1){let [,res]=tackleResult(s,d,k);risk+=res.startsWith('win')?100:(res==='push'?18:0)}return risk}
+function shapeScore(s,d){let ps=field(d,s).map(k=>s.pieces[d][k]),rows=ps.map(p=>p[0]),cols=ps.map(p=>p[1]).sort((a,b)=>a-b);let gaps=0;for(let i=0;i<cols.length-1;i++)gaps+=Math.max(0,Math.abs(cols[i]-cols[i+1])-2);return-3*(Math.max(...rows)-Math.min(...rows))-2*gaps+1.5*ps.filter(p=>p[1]>=2&&p[1]<=6).length}
+function coverCost(s,d){let ps=field(d,s).map(k=>s.pieces[d][k]),iso=0;for(let i=0;i<ps.length;i++){let best=99;for(let j=0;j<ps.length;j++)if(i!==j)best=Math.min(best,md(ps[i],ps[j]));if(best>3)iso++}return 10*iso}
+function offballThreat(s,d){let a=other(d);if(s.ballTeam!==a)return 0;let total=0;for(let k of field(a,s)){if(k===s.holder||!passLegal(s,a,s.holder,k)[0])continue;let p=s.pieces[a][k],depth=a==='A'?ROWS-1-p[0]:p[0],nearest=Math.min(...field(d,s).map(j=>md(p,s.pieces[d][j]))),freedom=Math.max(0,nearest-1);total+=Math.pow(1+depth,1.35)*(1+.8*freedom)}return total}
+function chooseTarget(s,d){let rp=routeProfile(s,other(d)),keys=['L','C','R'];return keys.reduce((best,L)=>(rp[L]-(L==='C'?0:2))<(rp[best]-(best==='C'?0:2))?L:best,'L')}
+function goalThreat(s,t){if(s.ballTeam!==t)return 0;let shots=legalActions(s,t).filter(a=>a[0]==='shoot').length;if(shots)return 1000+100*shots;let h=s.holder,hr=s.pieces[t][h][0],best=0;for(let k of field(t,s)){if(k===h)continue;let ok=passLegal(s,t,h,k)[0];if(!ok)continue;let p=s.pieces[t][k],depth=t==='A'?ROWS-1-p[0]:p[0],free=Math.min(...field(other(t),s).map(d=>md(p,s.pieces[other(t)][d])));best=Math.max(best,10*depth+3*Math.max(0,free-1))}let holderDepth=t==='A'?ROWS-1-hr:hr;return Math.max(best,8*holderDepth)}
+function switchValue(s,t){if(s.ballTeam!==t)return 0;let h=s.pieces[t][s.holder],v=0;for(let k of field(t,s)){if(k===s.holder||!passLegal(s,t,s.holder,k)[0])continue;let p=s.pieces[t][k];if(lane(p[1])!==lane(h[1]))v+=2}return v}
+// D7: delivery threat = not just "who is dangerous", but how easily the current holder can feed them.
+function passDeliveryThreat(s,t){
+ if(s.ballTeam!==t)return 0;
+ let h=s.holder,total=0,oppT=other(t);
+ for(let k of field(t,s)){
+  if(k===h||!passLegal(s,t,h,k)[0])continue;
+  let p=s.pieces[t][k],depth=t==='A'?ROWS-1-p[0]:p[0];
+  let nearest=Math.min(...field(oppT,s).map(d=>md(p,s.pieces[oppT][d])));
+  let freedom=Math.max(0,nearest-1);
+  let [n]=applyAction(s,t,['pass',h,k]);
+  let shotBonus=legalShotCount(n,t)*35;
+  total += 5*depth + 4*freedom + shotBonus;
+ }
+ return total;
+}
+function futureWinningTackles(s,d){
+ if(s.ballTeam===d)return 0;
+ let a=other(d),H=s.pieces[a][s.holder],n=0;
+ for(let k of field(d,s)){
+  if(md(s.pieces[d][k],H)!==1)continue;
+  let [,res]=tackleResult(s,d,k);
+  if(res&&res.startsWith('win'))n++;
+ }
+ return n;
+}
+function pushTrapValue(before,after,d){
+ let a=other(d);
+ if(after.ballTeam!==a)return 0;
+ let H=after.pieces[a][after.holder];
+ let edge=Math.min(H[0],ROWS-1-H[0],H[1],COLS-1-H[1]);
+ let adj=field(d,after).filter(k=>md(after.pieces[d][k],H)===1).length;
+ let futureWins=futureWinningTackles(after,d);
+ let progBefore=progress(before,a),progAfter=progress(after,a);
+ // Valuable if the push drives the carrier toward an edge / into another immediate trap.
+ return 22*(2-Math.min(2,edge)) + 24*futureWins + 7*adj - 10*Math.max(0,progAfter-progBefore);
+}
+
+
+// D8: evaluate not only the current ball position, but the best attacking sequence
+// available on the next action. This makes dangerous receivers (e.g. a high A6)
+// matter before they actually receive the ball.
+function depthOf(s,t,k){
+ let p=s.pieces[t][k]; return t==='A'?ROWS-1-p[0]:p[0];
+}
+function nearestDefDist(s,t,k){
+ let d=other(t),p=s.pieces[t][k];
+ return Math.min(...field(d,s).map(j=>md(p,s.pieces[d][j])));
+}
+function receiverThreat(s,t,k){
+ let depth=depthOf(s,t,k),free=Math.max(0,nearestDefDist(s,t,k)-1),v=9*depth+8*free;
+ if(s.ballTeam===t&&s.holder===k)v+=35*legalShotCount(s,t);
+ return v;
+}
+function maxReceiverThreat(s,t){
+ if(s.ballTeam!==t)return 0;
+ let h=s.holder,best=receiverThreat(s,t,h);
+ for(let k of field(t,s)){
+  if(k===h||!passLegal(s,t,h,k)[0])continue;
+  let [n]=applyAction(s,t,['pass',h,k]);
+  best=Math.max(best,receiverThreat(n,t,k)+55*legalShotCount(n,t));
+ }
+ return best;
+}
+function oneStepAttackThreat(s,t){
+ if(s.ballTeam!==t)return 0;
+ let now=120*legalShotCount(s,t)+2.0*maxReceiverThreat(s,t),best=now;
+ for(let a of legalActions(s,t)){
+  if(a[0]==='shoot'||a[0]==='gk_move')continue;
+  let [n]=applyAction(s,t,a);
+  let v=120*legalShotCount(n,t)+2.0*maxReceiverThreat(n,t)+4*progress(n,t);
+  if(a[0]==='pass'||a[0]==='dribble')v+=8;
+  best=Math.max(best,v);
+ }
+ return best;
+}
+function gkExposure(s,d){
+ let a=other(d),g=s.pieces[d][d+'G'];
+ if((d==='B'&&g[0]===-1)||(d==='A'&&g[0]===ROWS))return 0;
+ let exposure=0;
+ // Leaving the goal is acceptable only when the opponent cannot exploit it quickly.
+ if(s.ballTeam===a){
+  exposure += 90*legalShotCount(s,a);
+  exposure += .9*oneStepAttackThreat(s,a);
+ }
+ exposure += 18*Math.max(0, d==='B'?g[0]+1:ROWS-g[0]);
+ return exposure;
+}
+function markPressureValue(s,d){
+ let a=other(d); if(s.ballTeam!==a)return 0;
+ let h=s.holder,total=0;
+ for(let k of field(a,s)){
+  if(k===h||!passLegal(s,a,h,k)[0])continue;
+  let threat=receiverThreat(s,a,k);
+  let near=Math.min(...field(d,s).map(j=>md(s.pieces[d][j],s.pieces[a][k])));
+  total += threat*Math.max(0,near-1);
+ }
+ return total;
+}
+
+
+// D9: shallow adversarial lookahead. No recursive minimax.
+function fastAttackValue(s,t){
+ if(s.ballTeam!==t)return -1200;
+ let shots=legalShotCount(s,t);
+ let v=260*shots+2.4*maxReceiverThreat(s,t)+8*progress(s,t)+1.4*optionValue(s,t)-2.2*immediateRisk(s,t);
+ if(shots>0)v+=650;
+ return v;
+}
+function fastDefenseDanger(s,d){
+ let a=other(d);
+ if(s.ballTeam!==a)return -500;
+ return 260*legalShotCount(s,a)+1.9*maxReceiverThreat(s,a)+1.0*passDeliveryThreat(s,a)+5*progress(s,a)+1.1*optionValue(s,a);
+}
+function opponentBestDefenseAfterOne(s,attacker){
+ if(s.ballTeam!==attacker)return {value:-1200,action:null};
+ let d=other(attacker),acts=legalActions(s,d);
+ if(!acts.length)return {value:fastAttackValue(s,attacker),action:null};
+ let worst=Infinity,worstA=null;
+ for(let a of acts){
+  let [n,res]=applyAction(s,d,a),v=fastAttackValue(n,attacker);
+  if(n.ballTeam!==attacker)v-=900;
+  if(res==='push')v-=55*futureWinningTackles(n,d);
+  if(v<worst){worst=v;worstA=a}
+ }
+ return {value:worst,action:worstA};
+}
+function opponentBestAttackAfterOne(s,defender){
+ let a=other(defender);
+ if(s.ballTeam!==a)return {danger:-500,action:null};
+ let acts=legalActions(s,a);
+ if(!acts.length)return {danger:fastDefenseDanger(s,defender),action:null};
+ let best=-Infinity,bestA=null;
+ for(let x of acts){
+  let [n]=applyAction(s,a,x),danger=fastDefenseDanger(n,defender);
+  if(x[0]==='shoot')danger+=1200;
+  if(danger>best){best=danger;bestA=x}
+ }
+ return {danger:best,action:bestA};
+}
+
+function bChooseAttack(s){
+ let acts=legalActions(s,'B'),shots=acts.filter(a=>a[0]==='shoot');
+ if(shots.length)return[shots[0],'FINISH'];
+ let beforeThreat=goalThreat(s,'B'),beforeOpt=optionValue(s,'B'),beforeFuture=oneStepAttackThreat(s,'B'),cand=[];
+ for(let a of acts){
+  if(a[0]==='shoot')continue;
+  let [n]=applyAction(s,'B',a),afterThreat=goalThreat(n,'B'),future=oneStepAttackThreat(n,'B'),prog=progress(n,'B')-progress(s,'B');
+  let self=10*prog+2.0*(afterThreat-beforeThreat)+1.0*(optionValue(n,'B')-beforeOpt)+.75*(future-beforeFuture)+.18*future-immediateRisk(n,'B');
+  if((a[0]==='pass'||a[0]==='dribble')&&legalShotCount(n,'B')>0)self+=90;
+  if(a[0]==='pass')self+=8*switchValue(n,'B');
+  if(aiMem.transition>0){self+=7*prog+5*switchValue(n,'B');if(a[0]==='pass'||a[0]==='dribble')self+=14}
+  if(a[0]==='move'&&future<=beforeFuture&&afterThreat<=beforeThreat)self-=28+7*aiMem.stall;
+  if(a[0]==='move'&&aiMem.lastMover===a[1])self-=12*Math.max(1,aiMem.sameMover);
+  if(aiMem.hist.B.includes(stateSig(n,'B')))self-=120;
+  let reply=opponentBestDefenseAfterOne(n,'B');
+  let v=self+.62*reply.value;
+  if(reply.value<-900)v-=450;
+  cand.push([v,a,afterThreat,future,reply]);
+ }
+ cand.sort((x,y)=>y[0]-x[0]);let best=cand[0],a=best[1];
+ aiMem.hist.B=(aiMem.hist.B.concat([stateSig(s,'B')])).slice(-18);
+ if(a[0]==='move'){if(aiMem.lastMover===a[1])aiMem.sameMover++;else{aiMem.lastMover=a[1];aiMem.sameMover=1}}else{aiMem.lastMover=null;aiMem.sameMover=0}
+ if(best[3]<=beforeFuture)aiMem.stall++;else aiMem.stall=0;
+ if(aiMem.transition>0)aiMem.transition--;
+ let post=applyAction(s,'B',a)[0];
+ let phase=legalShotCount(post,'B')>0?'CREATE':(aiMem.transition>0?'TRANSITION':(a[0]==='move'?'BUILD/PROBE':'EXPLOIT'));
+ return[a,'LOOKAHEAD/'+phase];
+}
+function bChooseDefense(s){
+ if(!aiMem.steer.B)aiMem.steer.B=chooseTarget(s,'B');
+ let H=s.pieces.A[s.holder],target=aiMem.steer.B,acts=legalActions(s,'B');
+
+ let winning=[];
+ for(let a of acts){
+  if(a[0]!=='tackle')continue;
+  let [n,res]=applyAction(s,'B',a);
+  if(res&&res.startsWith('win'))winning.push([progress(n,'B')+switchValue(n,'B')-immediateRisk(n,'B'),a,res]);
+ }
+ if(winning.length){winning.sort((x,y)=>y[0]-x[0]);return[winning[0][1],'LOOKAHEAD/STRIKE/WIN']}
+
+ let currentShots=legalShotCount(s,'A'),currentNear=nearShotPotential(s,'A'),currentDelivery=passDeliveryThreat(s,'A');
+ let currentOptions=optionValue(s,'A'),currentFuture=oneStepAttackThreat(s,'A'),currentMark=markPressureValue(s,'B');
+ let intent;
+ if(currentShots>0||currentFuture>=170)intent='EMERGENCY';
+ else if(currentNear>=12||currentFuture>=115)intent='THREAT';
+ else if(Math.min(...field('B',s).map(k=>md(s.pieces.B[k],H)))<=3&&currentOptions>=8)intent='PRESS';
+ else intent='SHAPE';
+
+ let cand=[];
+ for(let a of acts){
+  let [n,res]=applyAction(s,'B',a);
+  let afterShots=legalShotCount(n,'A'),afterNear=nearShotPotential(n,'A'),afterDelivery=passDeliveryThreat(n,'A');
+  let afterFuture=oneStepAttackThreat(n,'A'),afterMark=markPressureValue(n,'B');
+  let shotGain=currentShots-afterShots,deliveryGain=currentDelivery-afterDelivery,futureGain=currentFuture-afterFuture,markGain=currentMark-afterMark;
+  let base=shapeScore(n,'B')-coverCost(n,'B'),self;
+
+  if(a[0]==='tackle'&&res==='push'){
+   self=base+65+pushTrapValue(s,n,'B')+6*(currentOptions-optionValue(n,'A'))+110*shotGain+3.0*deliveryGain+2.2*futureGain;
+  }else{
+   self=base+130*shotGain+3.0*deliveryGain+2.5*futureGain+.035*markGain-1.4*offballThreat(n,'B');
+   if(a[0]==='gk_move'){
+    self+=9*(currentNear-afterNear)-gkExposure(n,'B');
+    if(shotGain<=0&&futureGain<=4)self-=70;
+    self-=1.5*Math.abs(n.pieces.B.BG[1]-4);
+    if(aiMem.gkBias&&Math.sign(a[2][1]-s.pieces.B.BG[1])===-aiMem.gkBias)self-=18;
+   }else if(intent==='EMERGENCY')self+=3.0*futureGain+120*shotGain;
+   else if(intent==='THREAT')self+=1.8*futureGain+1.2*deliveryGain;
+   else if(intent==='PRESS'){
+    let nearest=Math.min(...field('B',n).map(k=>md(n.pieces.B[k],n.pieces.A[n.holder])));
+    self+=3.0*(-6*nearest-2*optionValue(n,'A'));
+   }else{
+    let rp=routeProfile(n,'A');
+    self-=1.6*Object.entries(rp).filter(([L])=>L!==target).reduce((z,[,x])=>z+x,0);
+    self+=.4*rp[target]-1.5*progress(n,'A');
+   }
+  }
+
+  let reply=opponentBestAttackAfterOne(n,'B');
+  let v=self-.72*reply.danger;
+  if(reply.action&&reply.action[0]==='shoot')v-=900;
+
+  let sig=JSON.stringify(n.pieces.B);
+  if(aiMem.defHist.B.includes(sig)&&res==='')v-=45;
+  cand.push([v,a,res,futureGain,shotGain,reply]);
+ }
+ cand.sort((x,y)=>y[0]-x[0]);
+ aiMem.defHist.B=(aiMem.defHist.B.concat([JSON.stringify(s.pieces.B)])).slice(-14);
+ let chosen=cand[0][1],res=cand[0][2];
+ if(chosen[0]==='gk_move')aiMem.gkBias=Math.sign(chosen[2][1]-s.pieces.B.BG[1]);
+ let phase=chosen[0]==='tackle'&&res==='push'?'TACKLE/TRAP':(chosen[0]==='gk_move'?'GK/COVER':intent);
+ return[chosen,'LOOKAHEAD/'+phase];
+}
+function aiMove(){return state.ballTeam==='B'?bChooseAttack(state):bChooseDefense(state)}
+function pushLog(text){logs.unshift(text);renderLog()}
+function actionName(a){if(a[0]==='gk_move')return`${a[1]} GK移動 → (${a[2][0]},${a[2][1]})`;if(a[0]==='move')return`${a[1]} 移動 → (${a[2][0]},${a[2][1]})`;if(a[0]==='dribble')return`${a[1]} ドリブル → (${a[2][0]},${a[2][1]})`;if(a[0]==='pass')return`${a[1]} → ${a[2]} パス`;if(a[0]==='tackle')return`${a[1]} タックル`;if(a[0]==='shoot')return`${a[1]} シュート (${a[2][1]})`;return a.join(' ')}
+function saveUndo(){history.push({state:cp(state),actionsLeft,selected,logs:cp(logs)});if(history.length>12)history.shift()}
+function humanDo(a){if(aiBusy||acting!=='A'||actionsLeft<=0)return;saveUndo();if(a[0]==='pass')setPassTrail(state.pieces.A[a[1]],state.pieces.A[a[2]]);let [n,res]=applyAction(state,'A',a);state=n;actionsLeft--;selected=null;legalTargets=[];shotCells=[];pushLog(`A ${actionName(a)}${res?' → '+res:''}`);if(res==='GOAL'){goal('A');return}render();if(actionsLeft<=0)setTimeout(startAI,250)}
+function goal(team){render();let ov=$('#overlay');$('#overlayBig').textContent=`GOAL ${team}`;$('#overlayText').textContent=`Score ${state.score.A}–${state.score.B}`;ov.classList.add('show');setTimeout(()=>{ov.classList.remove('show');let score=cp(state.score),kick=other(team);state=initial(score,kick);acting=kick;actionsLeft=ACTIONS;history=[];selected=null;legalTargets=[];shotCells=[];passTrail=null;aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};pushLog(`${kick} kickoff possession. ${kick}から開始。`);render();if(kick==='B')setTimeout(startAI,300)},900)}
+async function startAI(){if(aiBusy)return;acting='B';aiBusy=true;history=[];selected=null;legalTargets=[];shotCells=[];render();for(let i=0;i<ACTIONS;i++){await new Promise(r=>setTimeout(r,520));let [a,phase]=aiMove();if(a[0]==='pass')setPassTrail(state.pieces.B[a[1]],state.pieces.B[a[2]]);let beforeTeam=state.ballTeam,[n,res]=applyAction(state,'B',a);state=n;if(beforeTeam==='A'&&state.ballTeam==='B'&&res.startsWith('win'))aiMem.transition=4;pushLog(`B [${phase}] ${actionName(a)}${res?' → '+res:''}`);render();if(res==='GOAL'){aiBusy=false;goal('B');return}}aiBusy=false;acting='A';actionsLeft=ACTIONS;history=[];selected=null;legalTargets=[];shotCells=[];render()}
+function pieceAt(r,c){return occ(state)[[r,c].join(',')]}
+function selectCell(r,c){if(aiBusy||acting!=='A')return;let q=pieceAt(r,c);if(selected){let acts=legalActions(state,'A');let targetAct=null;if(q){if(state.ballTeam==='A'&&selected===state.holder&&q[0]==='A'){targetAct=acts.find(a=>a[0]==='pass'&&a[2]===q[1]);if(!targetAct){let [ok,why]=passLegal(state,'A',selected,q[1]);$('#msg').textContent=`${selected}→${q[1]} パス不可：${why}`}}else if(state.ballTeam==='B'&&q[0]==='B'&&q[1]===state.holder){targetAct=acts.find(a=>a[0]==='tackle'&&a[1]===selected)}}else{targetAct=acts.find(a=>(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected&&a[2][0]===r&&a[2][1]===c)}if(targetAct){humanDo(targetAct);return}}
+ if(q&&q[0]==='A'){selected=q[1];computeTargets();render()}else{selected=null;legalTargets=[];shotCells=[];render()}}
+function computeTargets(){legalTargets=[];shotCells=[];if(!selected)return;let acts=legalActions(state,'A');for(let a of acts){if((a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected)legalTargets.push(a[2].join(','));if(a[0]==='pass'&&a[1]===selected)legalTargets.push('piece:'+a[2]);if(a[0]==='tackle'&&a[1]===selected)legalTargets.push('piece:'+state.holder);if(a[0]==='shoot'&&selected===state.holder){for(let z of shotPath(state.pieces.A[state.holder],a[2]))if(inside(z))shotCells.push(z.join(','))}}}
+function render(){let board=$('#board');board.innerHTML='';for(let vr=0;vr<ROWS+2;vr++)for(let c=0;c<COLS;c++){let r=vr-1;let cell=document.createElement('div');cell.className='cell';if(r===-1||r===ROWS){cell.classList.add('goal-row');if(c<2||c>6)cell.classList.add('goal-out');}cell.dataset.r=r;cell.dataset.c=c;
+if((r===-1||r===ROWS)&&c>=2&&c<=6){
+ let gn=document.createElement('span');gn.className='goalnum';gn.textContent=c;cell.appendChild(gn);
+}if(legalTargets.includes([r,c].join(',')))cell.classList.add('legal');if(selected===state.holder&&state.ballTeam==='A'&&shotCells.includes([r,c].join(',')))cell.classList.add('shot-path');if(passTrail){let key=[r,c].join(',');if(passTrail.cells.includes(key))cell.classList.add('pass-trail');if(passTrail.from===key)cell.classList.add('pass-from');if(passTrail.to===key)cell.classList.add('pass-to');}let q=pieceAt(r,c);if(q){let [t,k]=q,p=document.createElement('div');p.className=`piece ${t} ${k.endsWith('G')?'gk':''}`;p.textContent=k;if(selected===k)p.parentElement?.classList.add('selected');if(legalTargets.includes('piece:'+k)){cell.classList.add('legal');cell.classList.add('pass-target')}if(state.ballTeam===t&&state.holder===k){let b=document.createElement('span');b.className='ball';p.appendChild(b)}cell.appendChild(p);if(selected===k)cell.classList.add('selected')}cell.onclick=()=>selectCell(r,c);board.appendChild(cell)}
+ $('#score').textContent=`${state.score.A}–${state.score.B}`;$('#turnText').textContent=acting==='A'?`A（あなた）のターン：残り ${actionsLeft} 手`:'B（D9）のターン';$('#phaseBadge').textContent=acting==='A'?'HUMAN':'AI';$('#msg').textContent=aiBusy?'D9が考えています…':(state.ballTeam==='A'?'Aがボール保持':'Bがボール保持');$('#undo').disabled=aiBusy||acting!=='A'||history.length===0;$('#endTurn').disabled=aiBusy||acting!=='A';renderGoalbar()}
+function renderGoals(){for(let side of ['Top','Bottom']){let el=$('#goal'+side);if(!el)continue;el.innerHTML='';for(let c=0;c<COLS;c++){let d=document.createElement('div');d.className='goal-slot'+(c>=2&&c<=6?' mouth':'');d.textContent=(c>=2&&c<=6)?c:'';if(selected===state.holder&&state.ballTeam==='A'&&side==='Top'&&legalActions(state,'A').some(a=>a[0]==='shoot'&&a[2][1]===c))d.classList.add('shootable');el.appendChild(d)}}}
+function renderGoalbar(){let g=$('#goalbar');g.innerHTML='';let acts=legalActions(state,'A').filter(a=>a[0]==='shoot'&&selected===state.holder);if(!acts.length)return;for(let a of acts){let b=document.createElement('button');b.textContent=`シュート → Goal ${a[2][1]}`;b.onclick=()=>humanDo(a);g.appendChild(b)}}
+function renderLog(){$('#logLines').innerHTML=logs.map(x=>`<div class="logline">${x}</div>`).join('')}
+$('#undo').onclick=()=>{if(!history.length||aiBusy)return;let h=history.pop();state=h.state;actionsLeft=h.actionsLeft;selected=h.selected;logs=h.logs;legalTargets=[];computeTargets();render();renderLog()};
+$('#endTurn').onclick=()=>{if(!aiBusy&&acting==='A'){actionsLeft=0;selected=null;legalTargets=[];shotCells=[];render();startAI()}};
+$('#restart').onclick=()=>{if(aiBusy)return;state=initial();acting='A';actionsLeft=ACTIONS;selected=null;legalTargets=[];shotCells=[];passTrail=null;history=[];logs=[];aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};render();renderLog()};
+$('#copyLog').onclick=async()=>{let text=logs.join('\n');try{await navigator.clipboard.writeText(text);$('#msg').textContent=`ログ ${logs.length}件をコピーしました`}catch(e){prompt('ログをコピーしてください',text)}};
+$('#rulesBtn').onclick=()=>alert('Rules 0.2\n・移動/ドリブル：縦横1マス\n・パス：縦/横/45°斜め\n・経路途中のDFは自動遮断しない\n・出し手のパス方向隣接DFで不可\n・縦/斜め：受け手のパス元側隣接DFで不可\n・横：受け手側DFでは止まらない\n・前後受け：未採用\n・オフサイドあり\n・タックル：縦横隣接、DFは動かず保持者を押す\n・GK同着は攻撃優位\n\nGKtest：破線の5マス（2〜6）が実際のゴールマス。GKはその中央を初期位置とし、ゴール内⇄フィールドを1手1マスで出入り可能。GKへのパスも可能。D9：D8の評価に加え、攻守とも各候補手の後に相手の最善1手を実際に試す浅い探索を行う。攻撃は即時タックル・push・選択肢消失を避け、守備は相手の次のシュート・危険パス・前進を最悪ケースとして評価。GKも同じ探索に含む。GK移動回数に固定上限は設けない。');
+render();renderLog();
+</script></body></html>
