@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>Human vs D9.1-GKtest · v0.5.2</title>
+<title>Soccer D10.0 · Search AI + Replay</title>
 <style>
 :root{--bg:#f5f5f1;--ink:#171717;--muted:#6f6f69;--line:#c9c9c2;--panel:#fff;--sel:#e8e8e2;--legal:#deded7;--ball:#111}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif}
@@ -21,20 +21,22 @@
 .badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:11px;margin-left:4px}.overlay{position:fixed;inset:0;background:rgba(255,255,255,.88);display:none;align-items:center;justify-content:center;z-index:20;text-align:center;padding:24px}.overlay.show{display:flex}.overlay .box{background:white;border:1px solid var(--line);border-radius:18px;padding:22px;max-width:360px}.overlay .big{font-size:28px;font-weight:800;margin-bottom:8px}
 #goalTop,#goalBottom{display:none!important}</style></head>
 <body><div class="app">
-<div class="header"><div><div class="title">Human A vs D9.1-GKtest B</div><div class="sub">Prototype v0.5.2 · Rules 0.2-GKtest-fix / AI D9.1</div></div><div class="sub">4 actions / turn</div></div>
+<div class="header"><div><div class="title">Soccer Tactical Lab</div><div class="sub">D10.0 · shared rules · beam search · replay</div></div><div class="sub">4 actions / turn</div></div>
 <div class="status"><div><b id="turnText">Aのターン</b><span id="phaseBadge" class="badge">HUMAN</span></div><div id="msg" class="message">駒をタップしてください。</div><div id="score" class="score">0–0</div></div>
 <div class="board-wrap"><div id="goalTop" class="goal-grid"></div><div id="board" class="board"></div><div id="goalBottom" class="goal-grid"></div><div id="goalbar" class="goalbar"></div></div>
-<div class="controls"><button id="undo">↶ Undo</button><button id="endTurn">ターン終了</button><button id="restart" class="danger">リスタート</button></div><div class="controls two"><button id="copyLog">ログをコピー</button><button id="rulesBtn">ルール表示</button></div>
-<div class="legend">○ A＝あなた　□ B＝D9.1 AI　●＝ボール　太枠＝GK。点＝移動先、輪郭強調＝パス可能な味方、ゴール側の強調＝得点可能コース。前後受けはRules 0.2では未採用。直前のパス軌跡は約1.5秒表示。AIはD9.1。</div>
+<div class="controls two"><button id="mode">対戦：人間 vs AI（B）</button><button id="aiHint">AIの候補手を分析</button></div><div id="aiReport" class="log" style="max-height:none;font-size:12px;margin-bottom:10px">Aを操作してください。Bは探索AIが担当します。モードは切替可能です。</div><div class="controls"><button id="undo">↶ Undo</button><button id="endTurn">ターン終了</button><button id="restart" class="danger">リスタート</button></div><div class="controls two"><button id="replayBtn">▶ 試合リプレイ</button><button id="copyLog">ログをコピー</button><button id="rulesBtn">ルール表示</button></div>
+<div class="legend">○ A＝Player A　□ B＝Player B　●＝ボール　太枠＝GK。点＝移動先、輪郭強調＝パス可能な味方、ゴール側の強調＝得点可能コース。前後受けは未採用。直前のパス軌跡は約1.5秒表示。パス受け後の同ターン初回ドリブルは2手消費。</div>
 <div class="log"><h3>Action log</h3><div id="logLines"></div></div>
 </div>
-<div id="overlay" class="overlay"><div class="box"><div id="overlayBig" class="big"></div><div id="overlayText"></div></div></div>
+<div id="replayPanel" style="display:none;position:fixed;inset:0;z-index:30;background:#f5f5f1;overflow:auto;padding:12px"><div style="max-width:720px;margin:auto"><div class="header"><b>試合リプレイ</b><button id="replayClose">ゲームに戻る</button></div><div class="status"><b id="replayStatus">0 / 0</b><span id="replayScore"></span><div id="replayEvent" class="message" style="grid-column:1/3"></div></div><div class="board-wrap"><div id="replayBoard" class="board"></div></div><input id="replaySeek" type="range" min="0" max="0" value="0" style="width:100%;margin:16px 0"/><div class="controls"><button id="replayFirst">|◀</button><button id="replayPrev">◀ 1手</button><button id="replayPlay">▶ 再生</button><button id="replayNext">1手 ▶</button><button id="replayLast">▶|</button><select id="replaySpeed"><option value="1400">ゆっくり</option><option value="800" selected>標準</option><option value="350">速い</option></select></div><p class="legend">全操作とターン交代を記録。パス軌跡、タックルによる押し出し、得点前の配置も確認できます。ゲームはリプレイ中に進行しません。</p></div></div><div id="overlay" class="overlay"><div class="box"><div id="overlayBig" class="big"></div><div id="overlayText"></div></div></div>
 <script>
 const ROWS=8,COLS=9,ACTIONS=4,DIR4=[[-1,0],[1,0],[0,-1],[0,1]];
 const $=s=>document.querySelector(s); const cp=o=>JSON.parse(JSON.stringify(o));
 function initial(score={A:0,B:0},ballTeam='A'){
- return {pieces:{A:{A1:[6,1],A2:[6,3],A3:[6,5],A4:[5,2],A5:[5,6],A6:[4,4],AG:[8,4]},B:{B1:[1,1],B2:[1,3],B3:[1,5],B4:[2,2],B5:[2,6],B6:[3,4],BG:[-1,4]}},ballTeam,holder:ballTeam==='A'?'A6':'B6',score:cp(score)};
+ return {pieces:{A:{A1:[6,1],A2:[6,3],A3:[6,5],A4:[5,2],A5:[5,6],A6:[4,4],AG:[8,4]},B:{B1:[1,1],B2:[1,3],B3:[1,5],B4:[2,2],B5:[2,6],B6:[3,4],BG:[-1,4]}},ballTeam,holder:ballTeam==='A'?'A6':'B6',score:cp(score),receivedThisTurn:null};
 }
+let replayFrames=[], replayOpen=false, replayIndex=0, replayTimer=null;
+let aiMode=true,aiGeneration=0,aiRunning=false,aiReportText="";
 let state=initial(), acting='A', actionsLeft=ACTIONS, selected=null, legalTargets=[], shotCells=[], history=[], logs=[], aiBusy=false, passTrail=null, passTrailTimer=null;
 let aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};
 const other=t=>t==='A'?'B':'A'; const md=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]); const inside=p=>p[0]>=0&&p[0]<ROWS&&p[1]>=0&&p[1]<COLS;
@@ -46,6 +48,7 @@ function ray(a,b){let dr=b[0]-a[0],dc=b[1]-a[1];if(dr===0&&dc!==0)return[0,sign(
 function occ(s=state){let m={};for(let t of ['A','B'])for(let [k,p] of Object.entries(s.pieces[t]))m[p.join(',')]=[t,k];return m}
 function field(t,s=state){return Object.keys(s.pieces[t]).filter(k=>!k.endsWith('G'))}
 function passPieces(t,s=state){return Object.keys(s.pieces[t])}
+function gkInGoal(s,t,k){if(!k.endsWith('G'))return false;let p=s.pieces[t][k];return t==='A'?p[0]===ROWS:p[0]===-1}
 function moveLegal(s,t,k,z){return inside(z)&&!occ(s)[z.join(',')]&&md(s.pieces[t][k],z)===1}
 function offsideLine(s,t){
  let d=other(t),rows=Object.keys(s.pieces[d]).map(k=>s.pieces[d][k][0]).sort((a,b)=>a-b);
@@ -53,6 +56,8 @@ function offsideLine(s,t){
 }
 function isOffside(s,t,rp,bp){let L=offsideLine(s,t);return t==='A'?rp[0]<Math.min(bp[0],L):rp[0]>Math.max(bp[0],L)}
 function passLegal(s,t,a,b){
+ if(gkInGoal(s,t,a))return[false,'ゴール内GKからはパスできない'];
+ if(gkInGoal(s,t,b))return[false,'ゴール内GKにはパスできない'];
  let src=s.pieces[t][a],dst=s.pieces[t][b],d=ray(src,dst);if(!d)return[false,'縦・横・45°斜めのみ'];
  // Rules 0.2: 中間のDFは自動遮断しない。出し手のパス方向1マスだけを見る。
  let sender=occ(s)[[src[0]+d[0],src[1]+d[1]].join(',')];if(sender&&sender[0]!==t)return[false,'出し手のパス方向をDFが塞いでいる'];
@@ -77,12 +82,37 @@ function nearShotPotential(s,t){
 }
 function gkMoveActions(s,t){
  let k=t+'G',p=s.pieces[t][k],out=[],o=occ(s);
- for(let [dr,dc] of DIR4){let z=[p[0]+dr,p[1]+dc];if(playableGK(z,t)&&!o[z.join(',')])out.push(['gk_move',k,z])}
+ let holding=s.ballTeam===t&&s.holder===k;
+ for(let [dr,dc] of DIR4){
+  let z=[p[0]+dr,p[1]+dc];
+  if(!playableGK(z,t)||o[z.join(',')])continue;
+  if(holding&&!inside(z))continue;
+  out.push(['gk_move',k,z]);
+ }
  return out;
 }
 
-function shotLegal(s,t,k,target){let src=s.pieces[t][k],d=ray(src,target);if(!d)return[false,'角度'];let q=occ(s)[[src[0]+d[0],src[1]+d[1]].join(',')];if(q&&q[0]!==t&&!q[1].endsWith('G'))return[false,'DFブロック'];let gk=s.pieces[other(t)][other(t)+'G'];for(let i=0;i<shotPath(src,target).length;i++){if(md(gk,shotPath(src,target)[i])<i+1)return[false,'GK']}return[true,'OK']}
-function applyAction(s,t,a){let n=cp(s),res='';if(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')n.pieces[t][a[1]]=a[2];else if(a[0]==='pass')n.holder=a[2];else if(a[0]==='tackle'){[n,res]=tackleResult(s,t,a[1])}else if(a[0]==='shoot'){n.score[t]++;res='GOAL'}return[n,res]}
+function shotLegal(s,t,k,target){let src=s.pieces[t][k],d=ray(src,target);if(!d)return[false,'角度'];let q=occ(s)[[src[0]+d[0],src[1]+d[1]].join(',')];if(q&&q[0]!==t&&!q[1].endsWith('G'))return[false,'DFブロック'];let gk=s.pieces[other(t)][other(t)+'G'];for(let i=0;i<shotPath(src,target).length;i++){if(md(gk,shotPath(src,target)[i])<=i+1)return[false,'GK']}return[true,'OK']}
+function applyAction(s,t,a){
+ let n=cp(s),res='';
+ if(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move'){
+  n.pieces[t][a[1]]=a[2];
+  if(a[0]==='dribble'&&n.receivedThisTurn&&n.receivedThisTurn.team===t&&n.receivedThisTurn.piece===a[1])n.receivedThisTurn=null;
+ }else if(a[0]==='pass'){
+  n.holder=a[2];
+  n.receivedThisTurn={team:t,piece:a[2]};
+ }else if(a[0]==='tackle'){
+  [n,res]=tackleResult(s,t,a[1]);
+  if(n)n.receivedThisTurn=null;
+ }else if(a[0]==='shoot'){
+  n.score[t]++;res='GOAL';n.receivedThisTurn=null;
+ }
+ return[n,res];
+}
+function actionCost(s,t,a){
+ if(a[0]==='dribble'&&s.receivedThisTurn&&s.receivedThisTurn.team===t&&s.receivedThisTurn.piece===a[1])return 2;
+ return 1;
+}
 function legalActions(s,t){
  let out=[];
  if(s.ballTeam===t){
@@ -97,7 +127,7 @@ function legalActions(s,t){
   let gr=t==='A'?-1:ROWS;for(let gc=2;gc<=6;gc++)if(shotLegal(s,t,h,[gr,gc])[0])out.push(['shoot',h,[gr,gc]]);
  } else {
   let H=s.pieces[other(t)][s.holder];
-  if(t==='B')out.push(...gkMoveActions(s,t));
+  out.push(...gkMoveActions(s,t));
   for(let k of field(t,s)){
    if(md(s.pieces[t][k],H)===1)out.push(['tackle',k]);
    let [r,c]=s.pieces[t][k];
@@ -474,26 +504,137 @@ function bChooseDefense(s){
 function aiMove(){return state.ballTeam==='B'?bChooseAttack(state):bChooseDefense(state)}
 function pushLog(text){logs.unshift(text);renderLog()}
 function actionName(a){if(a[0]==='gk_move')return`${a[1]} GK移動 → (${a[2][0]},${a[2][1]})`;if(a[0]==='move')return`${a[1]} 移動 → (${a[2][0]},${a[2][1]})`;if(a[0]==='dribble')return`${a[1]} ドリブル → (${a[2][0]},${a[2][1]})`;if(a[0]==='pass')return`${a[1]} → ${a[2]} パス`;if(a[0]==='tackle')return`${a[1]} タックル`;if(a[0]==='shoot')return`${a[1]} シュート (${a[2][1]})`;return a.join(' ')}
-function saveUndo(){history.push({state:cp(state),actionsLeft,selected,logs:cp(logs)});if(history.length>12)history.shift()}
-function humanDo(a){if(aiBusy||acting!=='A'||actionsLeft<=0)return;saveUndo();if(a[0]==='pass')setPassTrail(state.pieces.A[a[1]],state.pieces.A[a[2]]);let [n,res]=applyAction(state,'A',a);state=n;actionsLeft--;selected=null;legalTargets=[];shotCells=[];pushLog(`A ${actionName(a)}${res?' → '+res:''}`);if(res==='GOAL'){goal('A');return}render();if(actionsLeft<=0)setTimeout(startAI,250)}
-function goal(team){render();let ov=$('#overlay');$('#overlayBig').textContent=`GOAL ${team}`;$('#overlayText').textContent=`Score ${state.score.A}–${state.score.B}`;ov.classList.add('show');setTimeout(()=>{ov.classList.remove('show');let score=cp(state.score),kick=other(team);state=initial(score,kick);acting=kick;actionsLeft=ACTIONS;history=[];selected=null;legalTargets=[];shotCells=[];passTrail=null;aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};pushLog(`${kick} kickoff possession. ${kick}から開始。`);render();if(kick==='B')setTimeout(startAI,300)},900)}
-async function startAI(){if(aiBusy)return;acting='B';aiBusy=true;history=[];selected=null;legalTargets=[];shotCells=[];render();for(let i=0;i<ACTIONS;i++){await new Promise(r=>setTimeout(r,520));let [a,phase]=aiMove();if(a[0]==='pass')setPassTrail(state.pieces.B[a[1]],state.pieces.B[a[2]]);let beforeTeam=state.ballTeam,[n,res]=applyAction(state,'B',a);state=n;if(beforeTeam==='A'&&state.ballTeam==='B'&&res.startsWith('win'))aiMem.transition=4;pushLog(`B [${phase}] ${actionName(a)}${res?' → '+res:''}`);render();if(res==='GOAL'){aiBusy=false;goal('B');return}}aiBusy=false;acting='A';actionsLeft=ACTIONS;history=[];selected=null;legalTargets=[];shotCells=[];render()}
+function saveUndo(){history.push({state:cp(state),acting,actionsLeft,selected,logs:cp(logs)});if(history.length>20)history.shift()}
+function humanDo(a){
+ if(actionsLeft<=0||aiRunning||(aiMode&&acting==='B'))return;
+ let cost=actionCost(state,acting,a);
+ if(cost>actionsLeft){$('#msg').textContent='このドリブルには2手必要です';return}
+ saveUndo();
+ if(a[0]==='pass')setPassTrail(state.pieces[acting][a[1]],state.pieces[acting][a[2]]);
+ let [n,res]=applyAction(state,acting,a);state=n;actionsLeft-=cost;selected=null;legalTargets=[];shotCells=[];
+ let costNote=cost===2?' [2手]':'';
+ pushLog(`${acting} ${actionName(a)}${costNote}${res?' → '+res:''}`);replayRecord(logs[0],a);
+ if(res==='GOAL'){goal(acting);return}
+ render();
+ if(actionsLeft<=0)setTimeout(endHumanTurn,150);
+}
+function goal(team){render();let ov=$('#overlay');$('#overlayBig').textContent=`GOAL ${team}`;$('#overlayText').textContent=`Score ${state.score.A}–${state.score.B}`;ov.classList.add('show');setTimeout(()=>{ov.classList.remove('show');let score=cp(state.score),kick=other(team);state=initial(score,kick);acting=kick;actionsLeft=ACTIONS;history=[];selected=null;legalTargets=[];shotCells=[];passTrail=null;pushLog(`${kick} kickoff possession. ${kick}から開始。`);replayRecord(logs[0]);render();if(aiMode&&acting==='B')setTimeout(runAI,80)},900)}
+function endHumanTurn(){if(replayOpen)return;state.receivedThisTurn=null;acting=other(acting);actionsLeft=ACTIONS;selected=null;legalTargets=[];shotCells=[];replayRecord(`${acting} のターン開始`);render();if(aiMode&&acting==='B')setTimeout(runAI,80)}
 function pieceAt(r,c){return occ(state)[[r,c].join(',')]}
-function selectCell(r,c){if(aiBusy||acting!=='A')return;let q=pieceAt(r,c);if(selected){let acts=legalActions(state,'A');let targetAct=null;if(q){if(state.ballTeam==='A'&&selected===state.holder&&q[0]==='A'){targetAct=acts.find(a=>a[0]==='pass'&&a[2]===q[1]);if(!targetAct){let [ok,why]=passLegal(state,'A',selected,q[1]);$('#msg').textContent=`${selected}→${q[1]} パス不可：${why}`}}else if(state.ballTeam==='B'&&q[0]==='B'&&q[1]===state.holder){targetAct=acts.find(a=>a[0]==='tackle'&&a[1]===selected)}}else{targetAct=acts.find(a=>(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected&&a[2][0]===r&&a[2][1]===c)}if(targetAct){humanDo(targetAct);return}}
- if(q&&q[0]==='A'){selected=q[1];computeTargets();render()}else{selected=null;legalTargets=[];shotCells=[];render()}}
-function computeTargets(){legalTargets=[];shotCells=[];if(!selected)return;let acts=legalActions(state,'A');for(let a of acts){if((a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected)legalTargets.push(a[2].join(','));if(a[0]==='pass'&&a[1]===selected)legalTargets.push('piece:'+a[2]);if(a[0]==='tackle'&&a[1]===selected)legalTargets.push('piece:'+state.holder);if(a[0]==='shoot'&&selected===state.holder){for(let z of shotPath(state.pieces.A[state.holder],a[2]))if(inside(z))shotCells.push(z.join(','))}}}
+function selectCell(r,c){if(aiRunning||(aiMode&&acting==='B'))return;let q=pieceAt(r,c);if(selected){let acts=legalActions(state,acting).filter(a=>actionCost(state,acting,a)<=actionsLeft);let targetAct=null;if(q){if(state.ballTeam===acting&&selected===state.holder&&q[0]===acting){targetAct=acts.find(a=>a[0]==='pass'&&a[2]===q[1]);if(!targetAct){let [ok,why]=passLegal(state,acting,selected,q[1]);$('#msg').textContent=`${selected}→${q[1]} パス不可：${why}`}}else if(state.ballTeam!==acting&&q[0]===other(acting)&&q[1]===state.holder){targetAct=acts.find(a=>a[0]==='tackle'&&a[1]===selected)}}else{targetAct=acts.find(a=>(a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected&&a[2][0]===r&&a[2][1]===c)}if(targetAct){humanDo(targetAct);return}}
+ if(q&&q[0]===acting){selected=q[1];computeTargets();render()}else{selected=null;legalTargets=[];shotCells=[];render()}}
+function computeTargets(){legalTargets=[];shotCells=[];if(!selected)return;let acts=legalActions(state,acting).filter(a=>actionCost(state,acting,a)<=actionsLeft);for(let a of acts){if((a[0]==='move'||a[0]==='dribble'||a[0]==='gk_move')&&a[1]===selected)legalTargets.push(a[2].join(','));if(a[0]==='pass'&&a[1]===selected)legalTargets.push('piece:'+a[2]);if(a[0]==='tackle'&&a[1]===selected)legalTargets.push('piece:'+state.holder);if(a[0]==='shoot'&&selected===state.holder){for(let z of shotPath(state.pieces[acting][state.holder],a[2]))if(inside(z))shotCells.push(z.join(','))}}}
 function render(){let board=$('#board');board.innerHTML='';for(let vr=0;vr<ROWS+2;vr++)for(let c=0;c<COLS;c++){let r=vr-1;let cell=document.createElement('div');cell.className='cell';if(r===-1||r===ROWS){cell.classList.add('goal-row');if(c<2||c>6)cell.classList.add('goal-out');}cell.dataset.r=r;cell.dataset.c=c;
 if((r===-1||r===ROWS)&&c>=2&&c<=6){
  let gn=document.createElement('span');gn.className='goalnum';gn.textContent=c;cell.appendChild(gn);
-}if(legalTargets.includes([r,c].join(',')))cell.classList.add('legal');if(selected===state.holder&&state.ballTeam==='A'&&shotCells.includes([r,c].join(',')))cell.classList.add('shot-path');if(passTrail){let key=[r,c].join(',');if(passTrail.cells.includes(key))cell.classList.add('pass-trail');if(passTrail.from===key)cell.classList.add('pass-from');if(passTrail.to===key)cell.classList.add('pass-to');}let q=pieceAt(r,c);if(q){let [t,k]=q,p=document.createElement('div');p.className=`piece ${t} ${k.endsWith('G')?'gk':''}`;p.textContent=k;if(selected===k)p.parentElement?.classList.add('selected');if(legalTargets.includes('piece:'+k)){cell.classList.add('legal');cell.classList.add('pass-target')}if(state.ballTeam===t&&state.holder===k){let b=document.createElement('span');b.className='ball';p.appendChild(b)}cell.appendChild(p);if(selected===k)cell.classList.add('selected')}cell.onclick=()=>selectCell(r,c);board.appendChild(cell)}
- $('#score').textContent=`${state.score.A}–${state.score.B}`;$('#turnText').textContent=acting==='A'?`A（あなた）のターン：残り ${actionsLeft} 手`:'B（D9.1）のターン';$('#phaseBadge').textContent=acting==='A'?'HUMAN':'AI';$('#msg').textContent=aiBusy?'D9.1が考えています…':(state.ballTeam==='A'?'Aがボール保持':'Bがボール保持');$('#undo').disabled=aiBusy||acting!=='A'||history.length===0;$('#endTurn').disabled=aiBusy||acting!=='A';renderGoalbar()}
+}if(legalTargets.includes([r,c].join(',')))cell.classList.add('legal');if(selected===state.holder&&state.ballTeam===acting&&shotCells.includes([r,c].join(',')))cell.classList.add('shot-path');if(passTrail){let key=[r,c].join(',');if(passTrail.cells.includes(key))cell.classList.add('pass-trail');if(passTrail.from===key)cell.classList.add('pass-from');if(passTrail.to===key)cell.classList.add('pass-to');}let q=pieceAt(r,c);if(q){let [t,k]=q,p=document.createElement('div');p.className=`piece ${t} ${k.endsWith('G')?'gk':''}`;p.textContent=k;if(selected===k)p.parentElement?.classList.add('selected');if(legalTargets.includes('piece:'+k)){cell.classList.add('legal');cell.classList.add('pass-target')}if(state.ballTeam===t&&state.holder===k){let b=document.createElement('span');b.className='ball';p.appendChild(b)}cell.appendChild(p);if(selected===k)cell.classList.add('selected')}cell.onclick=()=>selectCell(r,c);board.appendChild(cell)}
+ $('#score').textContent=`${state.score.A}–${state.score.B}`;$('#turnText').textContent=`${acting} のターン：残り ${actionsLeft} 手`;$('#phaseBadge').textContent=aiMode&&acting==='B'?'AI':'HUMAN';$('#msg').textContent=(state.ballTeam==='A'?'Aがボール保持':'Bがボール保持');$('#undo').disabled=history.length===0;$('#endTurn').disabled=false;renderGoalbar()}
 function renderGoals(){for(let side of ['Top','Bottom']){let el=$('#goal'+side);if(!el)continue;el.innerHTML='';for(let c=0;c<COLS;c++){let d=document.createElement('div');d.className='goal-slot'+(c>=2&&c<=6?' mouth':'');d.textContent=(c>=2&&c<=6)?c:'';if(selected===state.holder&&state.ballTeam==='A'&&side==='Top'&&legalActions(state,'A').some(a=>a[0]==='shoot'&&a[2][1]===c))d.classList.add('shootable');el.appendChild(d)}}}
-function renderGoalbar(){let g=$('#goalbar');g.innerHTML='';let acts=legalActions(state,'A').filter(a=>a[0]==='shoot'&&selected===state.holder);if(!acts.length)return;for(let a of acts){let b=document.createElement('button');b.textContent=`シュート → Goal ${a[2][1]}`;b.onclick=()=>humanDo(a);g.appendChild(b)}}
+function renderGoalbar(){let g=$('#goalbar');g.innerHTML='';let acts=legalActions(state,acting).filter(a=>actionCost(state,acting,a)<=actionsLeft&&a[0]==='shoot'&&selected===state.holder);if(!acts.length)return;for(let a of acts){let b=document.createElement('button');b.textContent=`シュート → Goal ${a[2][1]}`;b.onclick=()=>humanDo(a);g.appendChild(b)}}
 function renderLog(){$('#logLines').innerHTML=logs.map(x=>`<div class="logline">${x}</div>`).join('')}
-$('#undo').onclick=()=>{if(!history.length||aiBusy)return;let h=history.pop();state=h.state;actionsLeft=h.actionsLeft;selected=h.selected;logs=h.logs;legalTargets=[];computeTargets();render();renderLog()};
-$('#endTurn').onclick=()=>{if(!aiBusy&&acting==='A'){actionsLeft=0;selected=null;legalTargets=[];shotCells=[];render();startAI()}};
-$('#restart').onclick=()=>{if(aiBusy)return;state=initial();acting='A';actionsLeft=ACTIONS;selected=null;legalTargets=[];shotCells=[];passTrail=null;history=[];logs=[];aiMem={hist:{B:[]},steer:{B:null},defHist:{B:[]},lastMover:null,sameMover:0,stall:0,transition:0,gkBias:0};render();renderLog()};
+$('#undo').onclick=()=>{if(aiRunning||(aiMode&&acting==='B'))return;if(!history.length)return;let h=history.pop();state=h.state;acting=h.acting;actionsLeft=h.actionsLeft;selected=h.selected;logs=h.logs;replayFrames.pop();legalTargets=[];computeTargets();render();renderLog()};
+$('#endTurn').onclick=()=>{if(aiRunning||(aiMode&&acting==='B'))return;actionsLeft=0;selected=null;legalTargets=[];shotCells=[];endHumanTurn()};
+$('#restart').onclick=()=>{aiGeneration++;aiRunning=false;state=initial();acting='A';actionsLeft=ACTIONS;selected=null;legalTargets=[];shotCells=[];passTrail=null;history=[];logs=[];replayFrames=[];replayRecord("キックオフ：Aがボール保持");render();renderLog()};
 $('#copyLog').onclick=async()=>{let text=logs.join('\n');try{await navigator.clipboard.writeText(text);$('#msg').textContent=`ログ ${logs.length}件をコピーしました`}catch(e){prompt('ログをコピーしてください',text)}};
-$('#rulesBtn').onclick=()=>alert('Rules 0.2\n・移動/ドリブル：縦横1マス\n・パス：縦/横/45°斜め\n・経路途中のDFは自動遮断しない\n・出し手のパス方向隣接DFで不可\n・縦/斜め：受け手のパス元側隣接DFで不可\n・横：受け手側DFでは止まらない\n・前後受け：未採用\n・オフサイドあり（GKを含む後方から2人目の守備者を基準）\n・タックル：縦横隣接、DFは動かず保持者を押す\n・GK同着は攻撃優位\n\nGKtest：破線の5マス（2〜6）が実際のゴールマス。GKはその中央を初期位置とし、ゴール内⇄フィールドを1手1マスで出入り可能。GKへのパスも可能。D9.1：D9の探索深度は維持し、評価の優先順位を調整。守備は①即時奪取、②次手で奪える配置、③ボール保持者の前進阻止、④決定機遮断、⑤Shapeの順に重視。GKはゴール露出と中央からの乖離を強く減点。攻撃は即時タックルを避けつつ、前進パス・前進ドリブル・CREATEを安全な横回しより高く評価。');
-render();renderLog();
+$('#rulesBtn').onclick=()=>alert('Rules 0.2\n・移動/ドリブル：縦横1マス\n・パス：縦/横/45°斜め\n・経路途中のDFは自動遮断しない\n・出し手のパス方向隣接DFで不可\n・縦/斜め：受け手のパス元側隣接DFで不可\n・横：受け手側DFでは止まらない\n・前後受け：未採用\n・オフサイドあり（GKを含む後方から2人目の守備者を基準）\n・タックル：縦横隣接、DFは動かず保持者を押す\n・GK同着はGK優位（同時到着はSAVE）\n・ゴール内GKにはパス不可／ゴール内GKからもパス不可\n・ビルドアップ参加はフィールド上のGKのみ\n・ボール保持GKはゴール内へ移動不可\n・フィールド上のGKは通常どおりタックル対象。ゴールを背負い逃げ先がない場合は奪取\n・パスを受けた駒が同じターン中に最初のドリブルをする場合、そのドリブルは2手消費\n・受けてすぐのパス／シュートは通常どおり1手\n\nGKtest：破線の5マス（2〜6）が実際のゴールマス。GKはその中央を初期位置とし、ゴール内⇄フィールドを1手1マスで出入り可能。GKへのパスも可能。対戦モードは人間同士／人間対探索AI（B）を切替可能。');
+
+function replayRecord(msg,action=null){replayFrames.push({state:cp(state),acting,actionsLeft,msg,action:action?cp(action):null});}
+function replayStop(){if(replayTimer){clearInterval(replayTimer);replayTimer=null}$('#replayPlay').textContent='▶ 再生'}
+function replayGo(n){replayIndex=Math.max(0,Math.min(n,replayFrames.length-1));replayDraw()}
+function replayDraw(){
+ const frame=replayFrames[replayIndex],prev=replayFrames[replayIndex-1],s=frame.state;
+ const b=$('#replayBoard');b.innerHTML='';
+ let from=null,to=null,path=[];
+ if(frame.action&&frame.action[0]==='pass'&&prev){let a=frame.action;from=prev.state.pieces[frame.acting][a[1]];to=s.pieces[frame.acting][a[2]];let d=ray(from,to);if(d){let z=[...from];while(z[0]!==to[0]||z[1]!==to[1]){z=[z[0]+d[0],z[1]+d[1]];path.push(z.join(','))}}}
+ const moved=[];if(prev)for(const t of ['A','B'])for(const k in s.pieces[t])if(JSON.stringify(s.pieces[t][k])!==JSON.stringify(prev.state.pieces[t][k]))moved.push(s.pieces[t][k].join(','));
+ for(let vr=0;vr<ROWS+2;vr++)for(let c=0;c<COLS;c++){
+ let r=vr-1,cell=document.createElement('div');cell.className='cell';if(r===-1||r===ROWS){cell.classList.add('goal-row');if(c<2||c>6)cell.classList.add('goal-out')}
+ if((r===-1||r===ROWS)&&c>=2&&c<=6){let gn=document.createElement('span');gn.className='goalnum';gn.textContent=c;cell.appendChild(gn)}
+ let key=[r,c].join(',');if(path.includes(key))cell.classList.add('pass-trail');if(from&&from.join(',')===key)cell.classList.add('pass-from');if(to&&to.join(',')===key)cell.classList.add('pass-to');if(moved.includes(key))cell.style.background='rgba(245,190,57,.23)';
+ for(const t of ['A','B'])for(const k in s.pieces[t]){let z=s.pieces[t][k];if(z[0]!==r||z[1]!==c)continue;let piece=document.createElement('div');piece.className=`piece ${t} ${k.endsWith('G')?'gk':''}`;piece.textContent=k;if(s.ballTeam===t&&s.holder===k){let ball=document.createElement('span');ball.className='ball';piece.appendChild(ball)}cell.appendChild(piece)}b.appendChild(cell)
+ }
+ $('#replayStatus').textContent=`${replayIndex} / ${replayFrames.length-1}　${frame.acting} 残り${frame.actionsLeft}手`;
+ $('#replayScore').textContent=`${s.score.A}–${s.score.B}`;$('#replayEvent').textContent=frame.msg;
+ $('#replaySeek').max=replayFrames.length-1;$('#replaySeek').value=replayIndex;
+}
+$('#replayBtn').onclick=()=>{replayOpen=true;replayStop();replayGo(replayFrames.length-1);$('#replayPanel').style.display='block'};
+$('#replayClose').onclick=()=>{replayStop();replayOpen=false;$('#replayPanel').style.display='none';render();if(aiMode&&acting==='B')setTimeout(runAI,80)};
+$('#replayFirst').onclick=()=>{replayStop();replayGo(0)};
+$('#replayPrev').onclick=()=>{replayStop();replayGo(replayIndex-1)};
+$('#replayNext').onclick=()=>{replayStop();replayGo(replayIndex+1)};
+$('#replayLast').onclick=()=>{replayStop();replayGo(replayFrames.length-1)};
+$('#replaySeek').oninput=e=>{replayStop();replayGo(Number(e.target.value))};
+$('#replayPlay').onclick=()=>{if(replayTimer){replayStop();return}if(replayIndex>=replayFrames.length-1)replayGo(0);$('#replayPlay').textContent='Ⅱ 停止';replayTimer=setInterval(()=>{if(replayIndex>=replayFrames.length-1){replayStop();return}replayGo(replayIndex+1)},Number($('#replaySpeed').value))};
+$('#replaySpeed').onchange=()=>{if(replayTimer){$('#replayPlay').click();$('#replayPlay').click()}};
+
+// D10 search: all successor states are generated by the same legalActions/applyAction as the human game.
+const D10={beam:18,replyBeam:9,rootCandidates:4,replyCandidates:2};
+function aiSignature(s,left){return JSON.stringify([s.pieces,s.ballTeam,s.holder,s.receivedThisTurn,left])}
+function aiScore(s,t){
+ let opp=other(t),diff=s.score[t]-s.score[opp];if(diff!==0)return diff*100000;
+ let atk=s.ballTeam===t?t:opp,sgn=atk===t?1:-1,holder=s.pieces[atk][s.holder];
+ let advance=atk==='A'?7-holder[0]:holder[0];
+ let score=sgn*(30+advance*3);
+ // legal shots and direct tackle wins are factual tactical features, not invented pass bonuses.
+ let shots=legalShotCount(s,atk);score+=sgn*shots*190;
+ let ownGK=s.pieces[t][t+'G'],oppGK=s.pieces[opp][opp+'G'];
+ let cover=(side)=>{let a=other(side),goal=side==='A'?7:0,def=field(side,s).map(k=>s.pieces[side][k]);let front=field(a,s).map(k=>s.pieces[a][k]);let risk=0;for(let x of front){let depth=side==='A'?x[0]:7-x[0];if(depth>=4){let near=Math.min(...def.map(y=>md(x,y)));risk+=Math.max(0,depth-3)*Math.min(near,5)}}return risk};
+ score+=0.8*(cover(opp)-cover(t));
+ let avail=legalActions(s,atk).filter(a=>a[0]==='pass').length;score+=sgn*Math.min(avail,6)*1.2;
+ return score;
+}
+function aiSearch(s,t,remaining,width,limit){
+ let beam=[{s,seq:[],left:remaining,rank:aiScore(s,t)}],finished=[];
+ for(let depth=0;depth<4;depth++){
+  let next=[];
+  for(const node of beam){
+   if(node.left<=0||node.s.score.A!==s.score.A||node.s.score.B!==s.score.B){finished.push(node);continue}
+   let actions=legalActions(node.s,t).filter(a=>actionCost(node.s,t,a)<=node.left);
+   for(const a of actions){let cost=actionCost(node.s,t,a),[ns]=applyAction(node.s,t,a);let n={s:ns,seq:[...node.seq,a],left:node.left-cost,rank:aiScore(ns,t)};next.push(n)}
+   // Ending the turn early is legal in the human UI.
+   if(node.seq.length)finished.push(node);
+  }
+  if(!next.length)break;
+  next.sort((a,b)=>b.rank-a.rank);
+  let seen=new Set(),unique=[];
+  for(const n of next){let key=aiSignature(n.s,n.left);if(seen.has(key))continue;seen.add(key);unique.push(n);if(unique.length>=width)break}
+  beam=unique;
+ }
+ finished.push(...beam);finished.sort((a,b)=>b.rank-a.rank);
+ let unique=[],seen=new Set();for(const n of finished){let key=aiSignature(n.s,n.left);if(seen.has(key))continue;seen.add(key);unique.push(n);if(unique.length>=limit)break}
+ return unique;
+}
+function aiChoose(s,t,remaining){
+ let roots=aiSearch(s,t,remaining,D10.beam,D10.rootCandidates);
+ let comparisons=[];
+ for(const root of roots){
+  if(root.s.score[t]>s.score[t]){comparisons.push({root,score:100000,reply:null});continue}
+  let reply=cp(root.s);reply.receivedThisTurn=null;
+ let replies=aiSearch(reply,other(t),4,D10.replyBeam,D10.replyCandidates);
+  let worst=replies.length?replies.reduce((a,b)=>aiScore(a.s,t)<aiScore(b.s,t)?a:b):null;
+  let value=worst?aiScore(worst.s,t):aiScore(root.s,t);
+  comparisons.push({root,score:value,reply:worst});
+ }
+ comparisons.sort((a,b)=>b.score-a.score);
+ return comparisons;
+}
+function aiShow(comps,t){let esc=x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;');
+ let rows=comps.map((v,i)=>`<div style="border-top:1px solid #ddd;padding:7px 0"><b>${i+1}. ${v.root.seq.map(actionName).map(esc).join(' → ')||'ターン終了'}</b><div>反撃後の評価 ${v.score.toFixed(1)} ／ 相手の想定: ${v.reply?v.reply.seq.map(actionName).map(esc).join(' → '):'得点確定・反撃なし'}</div></div>`).join('');
+ $('#aiReport').innerHTML=`<b>${t} の候補プラン（4手＋相手の4手）</b><div style="color:#666">ビーム幅${D10.beam}、反撃幅${D10.replyBeam}。評価値は暫定的な相対スコアで、真の最善手を保証しません。</div>${rows||'候補なし'}`;
+}
+function runAI(){if(!aiMode||acting!=='B'||replayOpen||aiRunning)return;aiRunning=true;let gen=aiGeneration;
+ $('#msg').textContent='D10が4手と相手の反撃を探索しています…';
+ setTimeout(()=>{
+  if(gen!==aiGeneration||!aiMode||acting!=='B'){aiRunning=false;return}
+  let comps=aiChoose(state,'B',actionsLeft);aiShow(comps,'B');let best=comps[0];
+  if(best)for(const a of best.root.seq){if(gen!==aiGeneration)break;let cost=actionCost(state,'B',a);if(cost>actionsLeft)break;
+   let [ns,res]=applyAction(state,'B',a);state=ns;actionsLeft-=cost;pushLog(`B ${actionName(a)}${cost===2?' [2手]':''}${res?' → '+res:''}`);replayRecord(logs[0],a);
+   if(res==='GOAL'){aiRunning=false;render();goal('B');return}
+  }
+  aiRunning=false;render();if(acting==='B')endHumanTurn();
+ },30);
+}
+$('#mode').onclick=()=>{if(aiRunning)return;aiMode=!aiMode;aiGeneration++;$('#mode').textContent=aiMode?'対戦：人間 vs AI（B）':'対戦：人間 vs 人間';$('#phaseBadge').textContent=aiMode&&acting==='B'?'AI':'HUMAN';if(aiMode&&acting==='B')setTimeout(runAI,50)};
+$('#aiHint').onclick=()=>{if(aiRunning)return;$('#aiReport').textContent='探索中…';setTimeout(()=>{let comps=aiChoose(state,acting,actionsLeft);aiShow(comps,acting)},25)};
+replayRecord("キックオフ：Aがボール保持");render();renderLog();
 </script></body></html>
